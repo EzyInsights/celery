@@ -1102,20 +1102,20 @@ Make your design asynchronous instead, for example by using *callbacks*.
 
     def update_page_info(url):
         # fetch_page -> parse_page -> store_page
-        chain = fetch_page.s() | parse_page.s(url) | store_page_info.s(url)
+        chain = fetch_page.s() | parse_page.s() | store_page_info.s(url)
         chain()
 
-    @celery.task(ignore_result=True)
+    @celery.task()
     def fetch_page(url):
         return myhttplib.get(url)
 
-    @celery.task(ignore_result=True)
-    def parse_page(url, page):
+    @celery.task()
+    def parse_page(page):
         return myparser.parse_document(page)
 
     @celery.task(ignore_result=True)
-    def store_page_info(url, info):
-        PageInfo.objects.create(url, info)
+    def store_page_info(info, url):
+        PageInfo.objects.create(url=url, info=info)
 
 
 Here I instead created a chain of tasks by linking together
@@ -1146,10 +1146,13 @@ overhead may not be worth it in the end.
 
 .. seealso::
 
-    The book `Art of Concurrency`_ has a whole section dedicated to the topic
-    of task granularity.
+    The book `Art of Concurrency`_ has a section dedicated to the topic
+    of task granularity [AOC1]_.
 
 .. _`Art of Concurrency`: http://oreilly.com/catalog/9780596521547
+
+.. [AOC1] Breshears, Clay. Section 2.2.1, "The Art of Concurrency".
+   O'Reilly Media, Inc. May 15, 2009.  ISBN-13 978-0-596-52153-0.
 
 .. _task-data-locality:
 
