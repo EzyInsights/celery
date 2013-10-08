@@ -9,6 +9,8 @@
 from __future__ import absolute_import
 
 from datetime import datetime
+from functools import wraps
+import time
 
 try:
     import pymongo
@@ -37,6 +39,25 @@ class Bunch(object):
     def __init__(self, **kw):
         self.__dict__.update(kw)
 
+def auto_retry(f):
+    ''' Forces decorated function to retry if mongo throws error '''
+    @wraps(f)
+    def wrapper(*args, **kwds):
+        retry_interval = kwds.pop("retry_interval", 5)
+        while True:
+            try:
+                return f(*args, **kwds)
+            except pymongo.errors.ConnectionFailure, e:
+                pass
+            time.sleep(retry_interval)
+    return wrapper
+
+def auto_retry_methods(*methods):
+    def decorate(klass):
+        for method in methods:
+            setattr(klass, method, auto_retry(getattr(klass, method)))
+        return klass
+    return decorate
 
 class MongoBackend(BaseDictBackend):
     mongodb_host = 'localhost'
@@ -213,9 +234,15 @@ class MongoBackend(BaseDictBackend):
         return self._get_database()
 
     @cached_property
+    @auto_retry
     def collection(self):
         """Get the metadata task collection."""
-        collection = self.database[self.mongodb_taskmeta_collection]
+        collection = auto_retry_methods(
+            "remove",
+            "find_one",
+            "save",
+            "count",
+            "ensure_index")(self.database[self.mongodb_taskmeta_collection])
 
         # Ensure an index on date_done is there, if not process the index
         # in the background. Once completed cleanup will be much faster
