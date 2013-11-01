@@ -272,8 +272,7 @@ class Task(object):
                 setattr(self, attr_name, conf[config_name])
         if self.accept_magic_kwargs is None:
             self.accept_magic_kwargs = app.accept_magic_kwargs
-        if self.backend is None:
-            self.backend = app.backend
+        self.backend = app.backend
 
         # decorate with annotations from config.
         if not was_bound:
@@ -454,13 +453,14 @@ class Task(object):
         router = router or self.app.amqp.router
         conf = app.conf
 
+        if conf.CELERY_ALWAYS_EAGER:
+            return self.apply(args, kwargs, task_id=task_id,
+                              link=link, link_error=link_error, **options)
+
         # add 'self' if this is a bound method.
         if self.__self__ is not None:
             args = (self.__self__, ) + tuple(args)
 
-        if conf.CELERY_ALWAYS_EAGER:
-            return self.apply(args, kwargs, task_id=task_id,
-                              link=link, link_error=link_error, **options)
         options = dict(extract_exec_options(self), **options)
         options = router.route(options, self.name, args, kwargs)
 
@@ -481,18 +481,16 @@ class Task(object):
 
     def subtask_from_request(self, request=None, args=None, kwargs=None,
                              **extra_options):
-
         request = self.request if request is None else request
         args = request.args if args is None else args
         kwargs = request.kwargs if kwargs is None else kwargs
-        delivery_info = request.delivery_info or {}
-        options = {
+        options = dict({
             'task_id': request.id,
             'link': request.callbacks,
             'link_error': request.errbacks,
-            'exchange': delivery_info.get('exchange'),
-            'routing_key': delivery_info.get('routing_key')
-        }
+            'group_id': request.group,
+            'chord': request.chord,
+        }, **request.delivery_info or {})
         return self.subtask(args, kwargs, options, type=self, **extra_options)
 
     def retry(self, args=None, kwargs=None, exc=None, throw=True,

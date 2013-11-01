@@ -203,8 +203,9 @@ class AsyncResult(ResultBase):
         return NotImplemented
 
     def __copy__(self):
-        r = self.__reduce__()
-        return r[0](*r[1])
+        return self.__class__(
+            self.id, self.backend, self.task_name, self.app, self.parent,
+        )
 
     def __reduce__(self):
         return self.__class__, self.__reduce_args__()
@@ -312,7 +313,7 @@ class ResultSet(ResultBase):
 
         """
         if isinstance(result, basestring):
-            result = AsyncResult(result)
+            result = self.app.AsyncResult(result)
         try:
             self.results.remove(result)
         except ValueError:
@@ -625,7 +626,9 @@ class GroupResult(ResultSet):
     @classmethod
     def restore(self, id, backend=None):
         """Restore previously saved group result."""
-        return (backend or current_app.backend).restore_group(id)
+        return (
+            backend or self.app.backend if self.app else current_app.backend
+        ).restore_group(id)
 
 
 class TaskSetResult(GroupResult):
